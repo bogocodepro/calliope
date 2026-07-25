@@ -35,6 +35,7 @@
 <h1>🎛️ Calliope Studio</h1>
 <div class=tabs>
  <button id=tabSpeak class=on onclick="showTab('speak')">Speak</button>
+ <button id=tabCall onclick="showTab('call')">📞 Call</button>
  <button id=tabVoices onclick="showTab('voices')">Voices</button>
 </div>
 
@@ -53,6 +54,19 @@
  <a id=dl class=sec style="display:none;margin-left:8px;text-decoration:none" download="calliope.wav">⬇ Download</a>
  <div class=status id=sstatus></div>
  <audio id=player controls></audio>
+</div>
+
+<!-- ===================== CALL ===================== -->
+<div id=call style=display:none>
+ <div class=hint>Have a live conversation: you talk into your mic, the agent listens, thinks, and replies out loud in the chosen voice. Talk over it to interrupt. Use a headset for best results.</div>
+ <label>Agent voice</label><div class=chips id=callVoiceChips></div>
+ <label>Persona</label><div class=chips id=callPersonaChips></div>
+ <div class=btns style="margin-top:16px">
+  <button class=go id=callStart onclick=startCall()>📞 Start call</button>
+  <button class=sec id=callEnd onclick=endCall() style="display:none;border-color:#5a2a2a;color:#e88">■ End call</button>
+ </div>
+ <div class=status id=callStatus></div>
+ <div id=transcript style="margin-top:14px;background:#0b0d11;border:1px solid #2a2f3a;border-radius:10px;padding:14px;min-height:120px;max-height:340px;overflow:auto;line-height:1.7;font-size:15px"></div>
 </div>
 
 <!-- ===================== VOICES ===================== -->
@@ -97,12 +111,13 @@ let model=%%DEFAULT%%, speakVoice='dan';
 const $=id=>document.getElementById(id);
 
 function showTab(t){
- $('speak').style.display=t=='speak'?'':'none';
- $('voices').style.display=t=='voices'?'':'none';
+ for(const n of ['speak','call','voices']) $(n).style.display=t==n?'':'none';
  $('tabSpeak').classList.toggle('on',t=='speak');
+ $('tabCall').classList.toggle('on',t=='call');
  $('tabVoices').classList.toggle('on',t=='voices');
  if(t=='voices')loadVoices();
  if(t=='speak')buildVoiceChips();
+ if(t=='call')buildCallControls();
 }
 
 // ---------- Speak ----------
@@ -137,6 +152,47 @@ $('gen').onclick=async()=>{
  }catch(e){$('sstatus').textContent='Error: '+e}
  $('gen').disabled=false;
 };
+
+// ---------- Call ----------
+let callVoice='dan', callPersona='casual', callTimer=null;
+async function buildCallControls(){
+ const r=await fetch('/api/voices'); const d=await r.json();
+ const box=$('callVoiceChips'); box.innerHTML='';
+ PRESETS.forEach(([n,g])=>addChip(box,n,g,()=>{callVoice=n;markSel(box,n)}));
+ d.custom.filter(v=>v.state=='ready').forEach(v=>addChip(box,v.name,'you',()=>{callVoice=v.name;markSel(box,v.name)}));
+ markSel(box,callVoice);
+ const pb=$('callPersonaChips'); if(!pb.children.length){
+  [['casual','Casual chat'],['sales','Sales agent']].forEach(([k,lbl])=>{
+   const b=document.createElement('button');b.dataset.n=k;b.textContent=lbl;
+   b.onclick=()=>{callPersona=k;markSel(pb,k)};pb.appendChild(b);
+  }); markSel(pb,callPersona);
+ }
+}
+async function startCall(){
+ $('callStart').disabled=true; $('callStatus').textContent='Starting… loading models (~30-60s), then it will greet you.';
+ const q=new URLSearchParams({voice:callVoice,persona:callPersona});
+ const r=await fetch('/api/call_start?'+q,{method:'POST'});
+ if(!r.ok){$('callStatus').textContent='Error: '+await r.text();$('callStart').disabled=false;return;}
+ $('callStart').style.display='none'; $('callEnd').style.display='';
+ $('transcript').innerHTML='';
+ callTimer=setInterval(pollCall,1500);
+}
+async function endCall(){
+ await fetch('/api/call_stop',{method:'POST'});
+ if(callTimer){clearInterval(callTimer);callTimer=null;}
+ $('callStart').style.display=''; $('callStart').disabled=false; $('callEnd').style.display='none';
+ $('callStatus').textContent='Call ended.';
+}
+async function pollCall(){
+ const r=await fetch('/api/call_status'); const d=await r.json();
+ if(!d.running){$('callStatus').textContent='Agent stopped (see it may still be loading or errored).';}
+ else if(d.ready){$('callStatus').innerHTML='🟢 <b>Live</b> — talk into your mic; voice: '+d.voice;}
+ else {$('callStatus').textContent='Loading models…';}
+ $('transcript').innerHTML=d.transcript.map(l=>{
+   const you=l.startsWith('🗣️'); return '<div style="color:'+(you?'#e6a3c9':'#8fd0a0')+'">'+l.replace(/</g,'&lt;')+'</div>';
+ }).join('');
+ $('transcript').scrollTop=$('transcript').scrollHeight;
+}
 
 // ---------- Voices ----------
 let curVoice=null, recDone=new Set(), recIdx=0, mr=null, chunks=[], stream=null, recording=false, pollT=null;

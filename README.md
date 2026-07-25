@@ -21,12 +21,11 @@ Built on open models: **Orpheus** (emotional TTS), **SNAC** (audio codec),
 
 | Tool | Command | What it does |
 |------|---------|--------------|
-| **Studio** (main) | `./run_studio.sh` → http://localhost:7860 | Web UI: type text and hear any voice, and create/record/train/manage **custom voices** |
-| **Live agent** | `./run.sh` | Real-time headset conversation: you talk, it listens (Whisper), thinks (Ollama), and replies in a chosen voice |
+| **Studio** (main) | `./run_studio.sh` → http://localhost:7860 | Web UI with three tabs: **Speak** (TTS), **Call** (live conversation), **Voices** (record/train custom voices) |
+| **Live agent (CLI)** | `./run.sh` | The same conversation loop as the Call tab, from a terminal |
 | **Recorder** (standalone) | `./run_record.sh` → http://localhost:7861 | Just the voice-dataset recorder (also built into the Studio) |
 
-The **Studio is where you'll spend your time.** The live agent is a proof-of-concept
-phone-style assistant.
+The **Studio is where you'll spend your time** — everything is in its three tabs.
 
 ---
 
@@ -132,6 +131,12 @@ Open **http://localhost:7860**.
   plus any voices **you've trained**.
 - **Speed** (pitch-preserving) and **Temperature** (lower = calmer) sliders.
 - **Generate & Play**, and **⬇ Download** the WAV.
+
+### Call tab — talk to it live
+Pick an agent voice (any preset **or your trained voice**) and a persona (casual or the
+sales script), hit **Start call**, and have a real conversation: you speak, it listens,
+thinks (local LLM), and replies out loud. Talk over it to interrupt. The transcript shows
+live. Needs Ollama running (the Studio starts it if installed). Use a headset.
 
 ### Voices tab — clone your own voice
 1. **Create** a voice and name it (e.g. `my_voice`).

@@ -121,21 +121,34 @@ class MicStream:
 
 
 class TTS:
-    """Orpheus wrapper — the emotional voice. Streams float32 chunks at self.sr."""
+    """Orpheus wrapper — resolves a preset OR a trained custom voice, single-pass decode."""
 
     def __init__(self, device: str):
-        from services.orpheus_local import OrpheusTTS
+        import json
+        from services.orpheus_local import OrpheusTTS, ENGLISH_VOICES
 
+        voice = config.orpheus_voice
+        if voice in ENGLISH_VOICES:
+            model_path, finetuned = config.orpheus_model_path, False
+        else:  # a trained custom voice: load its exported GGUF
+            vd = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "voice_dataset", "voices", voice)
+            st = json.load(open(os.path.join(vd, "status.json")))
+            model_path, finetuned = st["gguf"], True
+        logger.info(f"Call voice: {voice} ({'custom' if finetuned else 'preset'})")
         self.engine = OrpheusTTS(
-            model_path=config.orpheus_model_path,
-            voice=config.orpheus_voice,
-            device=device,
-            temperature=config.orpheus_temperature,
+            model_path=model_path, voice=voice, device=device,
+            temperature=config.orpheus_temperature, finetuned=finetuned,
         )
         self.sr = self.engine.sr
 
-    def stream(self, text: str):
-        return self.engine.stream(text)
+    def synth(self, text: str) -> np.ndarray:
+        """Full smooth reply (single-pass SNAC), loudness-normalized."""
+        audio = self.engine.synth_full(text)
+        pk = float(np.abs(audio).max()) if len(audio) else 0.0
+        if pk > 1e-4:
+            audio = np.clip(audio * min(0.95 / pk, 20.0), -1.0, 1.0)
+        return audio
 
 
 def load_models():
@@ -247,19 +260,14 @@ def speak(tts: TTS, mic: MicStream, vad_prob, text: str) -> bool:
     watcher.start()
 
     # 1) generate full reply (user can interrupt during this silence)
-    chunks = []
-    for chunk in tts.stream(text):
-        if interrupted.is_set():
-            break
-        chunks.append(np.asarray(chunk, dtype=np.float32))
-
-    if interrupted.is_set() or not chunks:
+    audio = tts.synth(text)
+    if interrupted.is_set() or len(audio) == 0:
         stopping.set()
         watcher.join(timeout=0.3)
         return interrupted.is_set()
 
-    # 2) speed up (pitch preserved)
-    audio = speedup(np.concatenate(chunks), config.orpheus_speed)
+    # 2) speed up (pitch preserved, no echo — Rubber Band)
+    audio = speedup(audio, config.orpheus_speed)
 
     # 3) play with barge-in
     pos = {"i": 0}

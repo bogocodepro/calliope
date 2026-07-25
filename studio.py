@@ -189,6 +189,75 @@ def train_status(name: str) -> dict:
     return {"state": st.get("state", "new"), "log": tail}
 
 
+# ---- live call (conversation agent) control ----
+_call = {"proc": None, "log": None, "voice": None}
+CALL_LOG = os.path.join(ROOT, "voice_dataset", "call.log")
+
+
+def ensure_ollama() -> bool:
+    import urllib.request
+    def up():
+        try:
+            urllib.request.urlopen("http://localhost:11434/api/tags", timeout=2)
+            return True
+        except Exception:
+            return False
+    if up():
+        return True
+    ol = os.path.expanduser("~/.local/bin/ollama")
+    if os.path.exists(ol):
+        subprocess.Popen(["setsid", ol, "serve"], stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+        for _ in range(20):
+            time.sleep(1)
+            if up():
+                return True
+    return False
+
+
+def start_call(voice: str, persona: str):
+    p = _call.get("proc")
+    if p and p.poll() is None:
+        raise RuntimeError("a call is already running")
+    if not ensure_ollama():
+        raise RuntimeError("brain (Ollama) not available — install it / run `ollama serve`")
+    log = open(CALL_LOG, "w")
+    env = dict(os.environ)
+    env["LD_LIBRARY_PATH"] = (os.path.expanduser(
+        "~/.local/palib/usr/lib/x86_64-linux-gnu") + ":" + env.get("LD_LIBRARY_PATH", ""))
+    env["ORPHEUS_VOICE"] = voice
+    env["PERSONA"] = persona if persona in ("casual", "sales") else "casual"
+    proc = subprocess.Popen([sys.executable, os.path.join(ROOT, "talk.py")],
+                            stdout=log, stderr=subprocess.STDOUT, cwd=ROOT, env=env)
+    _call.update(proc=proc, log=CALL_LOG, voice=voice)
+
+
+def stop_call():
+    p = _call.get("proc")
+    if p and p.poll() is None:
+        p.terminate()
+        try:
+            p.wait(timeout=3)
+        except Exception:
+            p.kill()
+    _call["proc"] = None
+
+
+def call_status() -> dict:
+    p = _call.get("proc")
+    running = bool(p and p.poll() is None)
+    transcript, ready = [], False
+    if os.path.exists(CALL_LOG):
+        txt = open(CALL_LOG, errors="ignore").read()
+        ready = "Calliope is live" in txt
+        for line in txt.splitlines():
+            s = line.strip()
+            if s.startswith("🤖") or s.startswith("🗣️"):
+                transcript.append(s)
+    return {"running": running, "ready": ready and running,
+            "voice": _call.get("voice"), "transcript": transcript[-40:]}
+
+
 PAGE = open(os.path.join(ROOT, "studio.html")).read() if os.path.exists(
     os.path.join(ROOT, "studio.html")) else ""
 
@@ -244,6 +313,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"state": read_status(d).get("state", "new"), "recorded": rec}); return
         if p.path == "/api/train_status":
             self._json(train_status(q.get("voice", [""])[0])); return
+        if p.path == "/api/call_status":
+            self._json(call_status()); return
         if p.path == "/api/synth":
             text = q.get("text", [""])[0].strip()
             if not text:
@@ -307,6 +378,15 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_error(400, str(e))
             return
+        if p.path == "/api/call_start":
+            try:
+                start_call(q.get("voice", ["dan"])[0], q.get("persona", ["casual"])[0])
+                self._json({"ok": True})
+            except Exception as e:
+                self.send_error(400, str(e))
+            return
+        if p.path == "/api/call_stop":
+            stop_call(); self._json({"ok": True}); return
         if p.path == "/api/voice_delete":
             name = q.get("voice", [""])[0]; d = vdir(name)
             if os.path.isdir(d):
