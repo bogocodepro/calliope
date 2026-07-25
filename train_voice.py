@@ -48,6 +48,7 @@ def main(name):
         raise SystemExit(f"no such voice: {name}")
     print(f"[train] voice={name}", flush=True)
 
+    import numpy as np
     import torch
     import soundfile as sf
     from snac import SNAC
@@ -79,6 +80,9 @@ def main(name):
         audio, sr = sf.read(wav_path, dtype="float32")
         if audio.ndim > 1:
             audio = audio.mean(axis=1)
+        pk = float(np.abs(audio).max())          # normalize loudness for consistent training
+        if pk > 1e-4:
+            audio = audio / pk * 0.95
         t = torch.tensor(audio, dtype=torch.float32, device=device).view(1, 1, -1)
         with torch.inference_mode():
             codes = snac.encode(t)

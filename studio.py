@@ -134,7 +134,7 @@ def get_custom_engine(name: str):
             return _custom_active["engine"]
         _custom_active["engine"] = None  # evict previous (bounds VRAM to one custom voice)
         eng = OrpheusTTS(model_path=st["gguf"], voice=name, device="cuda",
-                         temperature=0.25, snac_model=_shared_snac)
+                         temperature=0.25, snac_model=_shared_snac, finetuned=True)
         _custom_active.update(name=name, engine=eng)
         return eng
 
@@ -152,6 +152,9 @@ def synth_wav(text, voice, temp, speed, model) -> bytes:
             eng.temperature = float(temp)
             audio = eng.synth_full(text)
     audio = _speedup(audio, float(speed))
+    peak = float(np.abs(audio).max()) if len(audio) else 0.0
+    if peak > 1e-4:                       # normalize loudness (esp. quiet custom voices)
+        audio = np.clip(audio * min(0.95 / peak, 20.0), -1.0, 1.0)
     buf = io.BytesIO()
     sf.write(buf, audio, 24000, format="WAV", subtype="PCM_16")
     return buf.getvalue()
@@ -280,6 +283,13 @@ class Handler(BaseHTTPRequestHandler):
                 pcm = webm_to_wav24k(data)
                 if len(pcm) < 2400:
                     self.send_error(400, "too short"); return
+                # normalize each clip to a consistent loudness so quiet mic levels
+                # don't train a quiet/weak voice (recorder has auto-gain off)
+                pf = pcm.astype(np.float32) / 32768.0
+                pk = float(np.abs(pf).max())
+                if pk > 1e-4:
+                    pf = np.clip(pf * min(0.95 / pk, 30.0), -1.0, 1.0)
+                pcm = (pf * 32767).astype("<i2")
                 os.makedirs(os.path.join(d, "clips"), exist_ok=True)
                 sf.write(os.path.join(d, "clips", f"{i:03d}.wav"), pcm, 24000, subtype="PCM_16")
                 write_meta(d)

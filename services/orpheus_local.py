@@ -44,8 +44,11 @@ class OrpheusTTS:
     def __init__(self, model_path: str, voice: str = DEFAULT_VOICE,
                  device: str = "cuda", n_gpu_layers: int = -1, n_ctx: int = 4096,
                  temperature: float = 0.4, top_p: float = 0.9, lora_path=None,
-                 snac_model=None):
+                 snac_model=None, finetuned: bool = False):
         self.voice = voice  # allow custom speaker names (from fine-tuned voices)
+        # Fine-tuned (Unsloth) voices were trained with the special-token layout below;
+        # base preset models use the <|audio|>…<|eot_id|> string format. They differ!
+        self.finetuned = finetuned
         # Lower temperature => calmer, more even, less "performed" delivery.
         self.temperature = temperature
         self.top_p = top_p
@@ -149,22 +152,35 @@ class OrpheusTTS:
     def _format_prompt(self, text: str) -> str:
         return f"<|audio|>{self.voice}: {text}<|eot_id|>"
 
+    # Orpheus special tokens (Unsloth fine-tune layout)
+    _SOH, _EOT, _EOH, _SOA, _SOS, _EOS_SP, _EOA = 128003, 128009, 128004, 128005, 128257, 128258, 128006
+
+    def _prompt_ids(self, text: str):
+        if self.finetuned:
+            # exactly how train_voice.py built the training sequence (minus the audio)
+            tids = self.llm.tokenize(f"{self.voice}: {text}".encode("utf-8"),
+                                     add_bos=False, special=False)
+            return [self._SOH] + tids + [self._EOT, self._EOH, self._SOA, self._SOS]
+        s = f"<|audio|>{self.voice}: {text}<|eot_id|>"
+        return self.llm.tokenize(s.encode("utf-8"), add_bos=False, special=True)
+
     def _token_strings(self, text: str) -> Iterator[str]:
-        """Stream raw token text from llama.cpp, split on '>' like Orpheus expects."""
-        stream = self.llm.create_completion(
-            self._format_prompt(text),
-            max_tokens=2000,
-            temperature=self.temperature,
-            top_p=self.top_p,
-            repeat_penalty=1.1,
-            stream=True,
-        )
-        for chunk in stream:
-            piece = chunk["choices"][0]["text"]
-            if not piece:
-                continue
-            for part in piece.split(">"):
-                yield part + ">"
+        """Generate token-by-token, stopping the moment the model signals end-of-speech
+        (its EOS is unreliable, especially after fine-tuning -> runaway 'echo' tails)."""
+        prompt_ids = self._prompt_ids(text)
+        eos = self.llm.token_eos()
+        stops = {self._EOS_SP, self._EOA, self._EOT, eos}
+        n = 0
+        for tid in self.llm.generate(prompt_ids, temp=self.temperature, top_p=self.top_p,
+                                     repeat_penalty=1.1, reset=True):
+            if tid in stops:
+                break
+            n += 1
+            if n > 1400:  # hard safety cap (~17s of audio)
+                break
+            piece = self.llm.detokenize([tid]).decode("utf-8", errors="ignore")
+            if piece:
+                yield piece
 
     def stream(self, text: str) -> Iterator[np.ndarray]:
         """Yield float32 audio chunks (24 kHz) as they're generated (low latency)."""
