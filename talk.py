@@ -36,21 +36,18 @@ except Exception:
 import sounddevice as sd
 import requests
 from loguru import logger
-from audiotsm import wsola
-from audiotsm.io.array import ArrayReader, ArrayWriter
+from pedalboard import time_stretch
 
 from config import config
 
 
 def speedup(audio: np.ndarray, speed: float) -> np.ndarray:
-    """Speed up speech WITHOUT changing pitch (WSOLA — clean on voice, no phasiness)."""
+    """Speed up speech WITHOUT changing pitch or adding echo (Rubber Band)."""
     if speed == 1.0 or len(audio) < 512:
         return audio
-    reader = ArrayReader(audio.reshape(1, -1))
-    writer = ArrayWriter(channels=1)
-    tsm = wsola(channels=1, speed=speed)
-    tsm.run(reader, writer)
-    return writer.data.flatten().astype(np.float32)
+    out = time_stretch(audio.reshape(1, -1), 24000, stretch_factor=float(speed),
+                       high_quality=True)
+    return np.asarray(out, dtype=np.float32).reshape(-1)
 
 # Line-buffer stdout so transcripts show up promptly in logs.
 try:

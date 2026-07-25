@@ -24,8 +24,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import numpy as np
 import soundfile as sf
-from audiotsm import wsola
-from audiotsm.io.array import ArrayReader, ArrayWriter
+from pedalboard import time_stretch    # high-quality Rubber Band speed-up (no echo)
 
 from config import config
 from services.orpheus_local import OrpheusTTS, ENGLISH_VOICES
@@ -117,11 +116,12 @@ def list_custom() -> list:
 
 
 def _speedup(audio, speed):
+    """Speed up speech WITHOUT pitch change or echo, via Rubber Band (pedalboard)."""
     if abs(speed - 1.0) < 1e-3 or len(audio) < 512:
         return audio
-    r = ArrayReader(audio.reshape(1, -1)); w = ArrayWriter(channels=1)
-    wsola(channels=1, speed=speed).run(r, w)
-    return w.data.flatten().astype(np.float32)
+    out = time_stretch(audio.reshape(1, -1), 24000, stretch_factor=float(speed),
+                       high_quality=True)
+    return np.asarray(out, dtype=np.float32).reshape(-1)
 
 
 def get_custom_engine(name: str):

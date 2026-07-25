@@ -11,7 +11,7 @@ torchaudio==2.6.0
 # --- Audio ---
 soundfile>=0.12
 numpy>=1.24
-audiotsm>=0.1.2               # WSOLA speed-up (pitch-preserving)
+pedalboard>=0.9              # high-quality Rubber Band speed-up (pitch-preserving, no echo)
 av>=11.0                      # decodes browser recordings in the Studio recorder
 sounddevice>=0.5              # only needed for the live headset agent (talk.py)
 librosa>=0.10                 # only needed for the live agent
