@@ -93,10 +93,11 @@ class OrpheusTTS:
             codes_2[j * 4 + 3] = ft[idx + 6]
 
         codes = [codes_0.unsqueeze(0), codes_1.unsqueeze(0), codes_2.unsqueeze(0)]
-        if (torch.any(codes[0] < 0) or torch.any(codes[0] > 4096) or
-                torch.any(codes[1] < 0) or torch.any(codes[1] > 4096) or
-                torch.any(codes[2] < 0) or torch.any(codes[2] > 4096)):
-            return None
+        # Codebook indices are 0..4095. A stray code (e.g. 4096) is an out-of-range
+        # index that triggers an UNRECOVERABLE CUDA assertion and kills the process.
+        # Clamp to the valid range instead.
+        for cb in codes:
+            cb.clamp_(0, 4095)
 
         with torch.inference_mode():
             audio_hat = self.snac.decode(codes)
@@ -139,7 +140,7 @@ class OrpheusTTS:
 
         codes = [codes_0.unsqueeze(0), codes_1.unsqueeze(0), codes_2.unsqueeze(0)]
         for cb in codes:
-            cb.clamp_(0, 4096)
+            cb.clamp_(0, 4095)  # valid indices 0..4095; 4096 => CUDA assert => crash
         with torch.inference_mode():
             audio_hat = self.snac.decode(codes)          # full, seamless waveform
         audio = audio_hat[0, 0].detach().cpu().numpy().astype(np.float32)
