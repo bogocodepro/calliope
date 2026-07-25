@@ -1,0 +1,11 @@
+# Calliope — voice fine-tuning dependencies.
+# IMPORTANT: install these into a SEPARATE venv (.venv-train), NOT the inference venv.
+# Unsloth pulls its own (CUDA-13) torch build which would break the inference venv's
+# torch 2.6+cu124. Keeping them isolated is required.
+#
+#   python3 -m venv .venv-train
+#   .venv-train/bin/pip install -r requirements-train.txt
+
+unsloth
+snac
+soundfile

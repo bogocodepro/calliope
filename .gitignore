@@ -1,0 +1,42 @@
+# ---- Environments (never commit) ----
+.venv/
+.venv-train/
+__pycache__/
+*.pyc
+*.pyo
+
+# ---- Secrets / local config ----
+.env
+.env.local
+
+# ---- PRIVATE: your voice recordings & trained voices (never publish) ----
+voice_dataset/
+voices/
+*.wav
+*.webm
+
+# ---- Large model files (users download these; see README) ----
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.ckpt
+models/
+
+# ---- Training/runtime artifacts ----
+outputs/
+*.log
+train.log
+status.json
+adapter*/
+lora/
+gguf_export*/
+unsloth_compiled_cache/
+*.incomplete
+
+# ---- OS / editor cruft ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

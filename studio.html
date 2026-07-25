@@ -1,0 +1,234 @@
+<!doctype html><html><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Calliope Studio</title>
+<style>
+ body{font-family:system-ui,sans-serif;max-width:820px;margin:18px auto;padding:0 16px;background:#0f1115;color:#e6e6e6}
+ h1{font-size:20px;margin:0 0 12px}
+ .tabs{display:flex;gap:8px;margin-bottom:18px;border-bottom:1px solid #2a2f3a}
+ .tabs button{background:none;border:0;color:#9aa0aa;padding:10px 14px;font-size:15px;cursor:pointer;border-bottom:2px solid transparent}
+ .tabs button.on{color:#cfe0ff;border-color:#5b8cff}
+ label{display:block;margin:14px 0 4px;font-size:13px;color:#9aa0aa}
+ textarea{width:100%;height:84px;background:#171a21;color:#e6e6e6;border:1px solid #2a2f3a;border-radius:8px;padding:10px;font-size:15px;resize:vertical}
+ input[type=text]{background:#171a21;color:#e6e6e6;border:1px solid #2a2f3a;border-radius:8px;padding:10px;font-size:15px}
+ .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+ .chips button{padding:9px 12px;border:1px solid #2a2f3a;background:#171a21;color:#e6e6e6;border-radius:8px;cursor:pointer;font-size:14px}
+ .chips button.sel{border-color:#5b8cff;background:#1c2740;color:#cfe0ff}
+ .chips .m{color:#8fd0a0}.chips .f{color:#e6a3c9}.chips .you{color:#ffd27a}
+ .row{display:flex;gap:20px;flex-wrap:wrap}.ctrl{flex:1;min-width:200px}
+ input[type=range]{width:100%}.val{color:#cfe0ff;font-variant-numeric:tabular-nums}
+ button.go{margin-top:16px;padding:11px 18px;font-size:15px;border-radius:8px;border:0;background:#5b8cff;color:#04122e;font-weight:600;cursor:pointer}
+ button.go:disabled{opacity:.5}
+ button.rec{background:#c0392b;border:0;color:#fff;font-weight:600;min-width:140px;padding:11px 18px;border-radius:8px;cursor:pointer}
+ button.rec.on{background:#e74c3c;animation:pulse 1s infinite}@keyframes pulse{50%{opacity:.6}}
+ button.sec{background:#1c2029;border:1px solid #2a2f3a;color:#e6e6e6;padding:10px 14px;border-radius:8px;cursor:pointer}
+ audio{width:100%;margin-top:14px}.status{margin-top:10px;font-size:13px;color:#9aa0aa;min-height:18px}
+ .hint{font-size:12px;color:#6b7280;margin-top:6px;line-height:1.6}
+ .card{background:#171a21;border:1px solid #2a2f3a;border-radius:12px;padding:22px;text-align:center;font-size:20px;line-height:1.5;min-height:70px;display:flex;align-items:center;justify-content:center}
+ .vlist{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+ .vrow{display:flex;align-items:center;gap:10px;background:#171a21;border:1px solid #2a2f3a;border-radius:8px;padding:10px 12px}
+ .vrow .nm{font-weight:600}.vrow .st{font-size:12px;padding:2px 8px;border-radius:20px}
+ .st.ready{background:#12351f;color:#8fd0a0}.st.recording{background:#3a2f12;color:#ffd27a}.st.training{background:#2a1f3a;color:#c9a3e6}.st.new{background:#232833;color:#9aa0aa}
+ .bar{height:6px;background:#232833;border-radius:4px;overflow:hidden;margin-top:8px}.bar>i{display:block;height:100%;background:#5b8cff}
+ pre{background:#0b0d11;border:1px solid #2a2f3a;border-radius:8px;padding:10px;font-size:12px;max-height:180px;overflow:auto;white-space:pre-wrap}
+ .sp{flex:1}
+</style></head><body>
+<h1>🎛️ Calliope Studio</h1>
+<div class=tabs>
+ <button id=tabSpeak class=on onclick="showTab('speak')">Speak</button>
+ <button id=tabVoices onclick="showTab('voices')">Voices</button>
+</div>
+
+<!-- ===================== SPEAK ===================== -->
+<div id=speak>
+ <label>Text</label>
+ <textarea id=text>Yeah, I hear you. It's been a pretty slow week on my end, but we're getting through it.</textarea>
+ <div class=hint>Emotion tags work inline: &lt;laugh&gt; &lt;chuckle&gt; &lt;sigh&gt; &lt;gasp&gt;</div>
+ <label>Voice</label><div class=chips id=voiceChips></div>
+ <label>Model</label><div class=chips id=modelChips></div>
+ <div class=row>
+  <div class=ctrl><label>Speed <span class=val id=spdv>1.15</span>x</label><input type=range id=spd min=0.9 max=1.5 step=0.01 value=1.15></div>
+  <div class=ctrl><label>Temperature <span class=val id=tmpv>0.25</span></label><input type=range id=tmp min=0.15 max=0.9 step=0.05 value=0.25></div>
+ </div>
+ <button class=go id=gen>▶ Generate &amp; Play</button>
+ <a id=dl class=sec style="display:none;margin-left:8px;text-decoration:none" download="calliope.wav">⬇ Download</a>
+ <div class=status id=sstatus></div>
+ <audio id=player controls></audio>
+</div>
+
+<!-- ===================== VOICES ===================== -->
+<div id=voices style=display:none>
+ <label>Create a new voice</label>
+ <div style="display:flex;gap:8px">
+  <input type=text id=newName placeholder="e.g. my_voice" style=flex:1>
+  <button class=sec onclick=createVoice()>+ Create</button>
+ </div>
+ <div class=hint>Make a voice, record ~50+ of the sentences in your natural tone, then Train. It'll appear under Voice in the Speak tab.</div>
+
+ <label>Your voices</label>
+ <div class=vlist id=vlist></div>
+
+ <div id=recPanel style="display:none;margin-top:22px;border-top:1px solid #2a2f3a;padding-top:16px">
+  <div style="display:flex;align-items:center;gap:10px">
+   <b id=recTitle></b><span class=st id=recState></span><div class=sp></div>
+   <button class=sec id=trainBtn onclick=train()>⚙ Train this voice</button>
+   <button class=sec style="border-color:#5a2a2a;color:#e88" onclick="deleteVoice(curVoice)">🗑 Delete voice</button>
+  </div>
+  <div class=bar><i id=recBar></i></div>
+  <div class=status id=recProg></div>
+  <div class=card id=recCard>…</div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center">
+   <button class=sec onclick=recNav(-1)>← Prev</button>
+   <button class=rec id=recBtn onclick=recToggle()>● Record</button>
+   <button class=sec onclick=recNav(1)>Next →</button>
+   <button class=sec onclick=recNextUnrec()>Next unrecorded</button>
+   <button class=sec id=delClipBtn style="border-color:#5a2a2a;color:#e88" onclick=deleteClip()>🗑 Delete this clip</button>
+  </div>
+  <audio id=recPlayer controls></audio>
+  <div class=hint><b>Space</b>=record/stop · <b>←/→</b>=move. Speak calmly, one-to-one, in a quiet room. Re-record any time.</div>
+  <div id=trainWrap style=display:none>
+   <label>Training progress</label><pre id=trainLog>…</pre>
+  </div>
+ </div>
+</div>
+
+<script>
+const PRESETS=%%PRESETS%%, SENTENCES=%%SENTENCES%%, MODELS=%%MODELS%%;
+let model=%%DEFAULT%%, speakVoice='dan';
+const $=id=>document.getElementById(id);
+
+function showTab(t){
+ $('speak').style.display=t=='speak'?'':'none';
+ $('voices').style.display=t=='voices'?'':'none';
+ $('tabSpeak').classList.toggle('on',t=='speak');
+ $('tabVoices').classList.toggle('on',t=='voices');
+ if(t=='voices')loadVoices();
+ if(t=='speak')buildVoiceChips();
+}
+
+// ---------- Speak ----------
+async function buildVoiceChips(){
+ const r=await fetch('/api/voices'); const d=await r.json();
+ const box=$('voiceChips'); box.innerHTML='';
+ PRESETS.forEach(([n,g])=>addChip(box,n,g,()=>{speakVoice=n;markSel(box,n)}));
+ d.custom.filter(v=>v.state=='ready').forEach(v=>addChip(box,v.name,'you',()=>{speakVoice=v.name;markSel(box,v.name)}));
+ markSel(box,speakVoice);
+}
+function addChip(box,name,g,onclick){
+ const b=document.createElement('button'); b.dataset.n=name;
+ b.innerHTML=name+(g?' <span class='+g+'>('+(g=='you'?'yours':g)+')</span>':'');
+ b.onclick=onclick; box.appendChild(b);
+}
+function markSel(box,name){[...box.children].forEach(c=>c.classList.toggle('sel',c.dataset.n==name));}
+const mbox=$('modelChips');
+MODELS.forEach(k=>addChip(mbox,k,'',()=>{model=k;markSel(mbox,k)}));
+markSel(mbox,model);
+$('spd').oninput=()=>$('spdv').textContent(+$('spd').value).toFixed?$('spdv').textContent=(+$('spd').value).toFixed(2):0;
+$('spd').oninput=()=>$('spdv').textContent=(+$('spd').value).toFixed(2);
+$('tmp').oninput=()=>$('tmpv').textContent=(+$('tmp').value).toFixed(2);
+$('gen').onclick=async()=>{
+ const text=$('text').value.trim(); if(!text)return;
+ $('gen').disabled=true; $('sstatus').textContent='Generating…'; const t0=performance.now();
+ try{
+  const q=new URLSearchParams({text,voice:speakVoice,speed:$('spd').value,temp:$('tmp').value,model});
+  const r=await fetch('/api/synth?'+q); if(!r.ok){$('sstatus').textContent='Error: '+await r.text();$('gen').disabled=false;return;}
+  const b=await r.blob(); const url=URL.createObjectURL(b); $('player').src=url; $('player').play();
+  $('dl').href=url; $('dl').download=speakVoice+'.wav'; $('dl').style.display='';
+  $('sstatus').textContent=speakVoice+' · '+((performance.now()-t0)/1000).toFixed(1)+'s';
+ }catch(e){$('sstatus').textContent='Error: '+e}
+ $('gen').disabled=false;
+};
+
+// ---------- Voices ----------
+let curVoice=null, recDone=new Set(), recIdx=0, mr=null, chunks=[], stream=null, recording=false, pollT=null;
+async function loadVoices(){
+ const r=await fetch('/api/voices'); const d=await r.json();
+ const box=$('vlist'); box.innerHTML='';
+ if(!d.custom.length){box.innerHTML='<div class=hint>No custom voices yet. Create one above.</div>';}
+ d.custom.forEach(v=>{
+  const row=document.createElement('div'); row.className='vrow';
+  row.innerHTML=`<span class=nm>${v.name}</span><span class="st ${v.state}">${v.state}</span>
+   <span class=hint>${v.clips}/${v.total} clips</span><div class=sp></div>`;
+  const b=document.createElement('button'); b.className='sec'; b.textContent=v.state=='ready'?'Re-record':'Open';
+  b.onclick=()=>openVoice(v.name); row.appendChild(b);
+  if(v.state!='ready'){const rn=document.createElement('button');rn.className='sec';rn.textContent='Rename';rn.onclick=()=>renameVoice(v.name);row.appendChild(rn);}
+  const del=document.createElement('button');del.className='sec';del.style.borderColor='#5a2a2a';del.style.color='#e88';del.textContent='Delete';del.onclick=()=>deleteVoice(v.name);row.appendChild(del);
+  box.appendChild(row);
+ });
+}
+async function createVoice(){
+ const name=$('newName').value.trim(); if(!name)return;
+ const r=await fetch('/api/voice_create?name='+encodeURIComponent(name),{method:'POST'});
+ if(r.ok){const d=await r.json();$('newName').value='';await loadVoices();openVoice(d.name);}
+ else alert('Error: '+await r.text());
+}
+async function openVoice(name){
+ curVoice=name; $('recPanel').style.display=''; $('recTitle').textContent=name;
+ const r=await fetch('/api/voice_detail?voice='+encodeURIComponent(name)); const d=await r.json();
+ recDone=new Set(d.recorded); recIdx=0; renderRec(); updateTrainBtn(d.state);
+ if(d.state=='training')startPoll(); else stopPoll();
+ $('recPanel').scrollIntoView({behavior:'smooth'});
+}
+function renderRec(){
+ $('recCard').textContent=SENTENCES[recIdx];
+ $('recProg').textContent=`${recDone.size} recorded · sentence ${recIdx+1}/${SENTENCES.length} `+(recDone.has(recIdx)?'✓':'· not yet');
+ $('recBar').style.width=(100*recDone.size/SENTENCES.length)+'%';
+ $('recPlayer').src=recDone.has(recIdx)?('/api/clip?voice='+encodeURIComponent(curVoice)+'&i='+recIdx+'&t='+Date.now()):'';
+ $('delClipBtn').disabled=!recDone.has(recIdx);
+}
+async function deleteVoice(name){
+ if(!name)return;
+ if(!confirm('Delete voice "'+name+'" and all its recordings'+(true?' (and trained model if any)':'')+'? This cannot be undone.'))return;
+ const r=await fetch('/api/voice_delete?voice='+encodeURIComponent(name),{method:'POST'});
+ if(r.ok){if(curVoice==name){curVoice=null;$('recPanel').style.display='none';}loadVoices();buildVoiceChips();}
+ else alert('Error: '+await r.text());
+}
+async function renameVoice(name){
+ const to=prompt('Rename "'+name+'" to:',name); if(!to||to==name)return;
+ const r=await fetch('/api/voice_rename?voice='+encodeURIComponent(name)+'&to='+encodeURIComponent(to),{method:'POST'});
+ if(r.ok){const d=await r.json();if(curVoice==name)openVoice(d.name);loadVoices();}
+ else alert('Error: '+await r.text());
+}
+async function deleteClip(){
+ if(!curVoice||!recDone.has(recIdx))return;
+ const r=await fetch('/api/clip_delete?voice='+encodeURIComponent(curVoice)+'&i='+recIdx,{method:'POST'});
+ if(r.ok){recDone.delete(recIdx);renderRec();updateTrainBtn();loadVoices();}
+}
+function recNav(dir){recIdx=(recIdx+dir+SENTENCES.length)%SENTENCES.length;renderRec();}
+function recNextUnrec(){for(let k=1;k<=SENTENCES.length;k++){let j=(recIdx+k)%SENTENCES.length;if(!recDone.has(j)){recIdx=j;break}}renderRec();}
+async function ensureMic(){if(!stream)stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}});}
+async function recToggle(){
+ if(recording){mr.stop();return;}
+ await ensureMic(); chunks=[]; mr=new MediaRecorder(stream,{mimeType:'audio/webm'});
+ mr.ondataavailable=e=>chunks.push(e.data);
+ mr.onstop=async()=>{
+  recording=false;$('recBtn').classList.remove('on');$('recBtn').textContent='● Record';
+  const blob=new Blob(chunks,{type:'audio/webm'});
+  const r=await fetch('/api/record?voice='+encodeURIComponent(curVoice)+'&i='+recIdx,{method:'POST',body:blob});
+  if(r.ok){recDone.add(recIdx);renderRec();$('recPlayer').play?.();updateTrainBtn();loadVoices();}
+ };
+ mr.start();recording=true;$('recBtn').classList.add('on');$('recBtn').textContent='■ Stop';
+}
+function updateTrainBtn(state){
+ const enough=recDone.size>=20;
+ $('trainBtn').disabled=!enough||state=='training';
+ $('trainBtn').textContent=state=='training'?'⏳ Training…':(state=='ready'?'⚙ Re-train':'⚙ Train this voice')+(enough?'':` (need ${20-recDone.size} more)`);
+}
+async function train(){
+ const r=await fetch('/api/train?voice='+encodeURIComponent(curVoice),{method:'POST'});
+ if(r.ok){$('trainWrap').style.display='';startPoll();updateTrainBtn('training');}
+ else alert('Error: '+await r.text());
+}
+function startPoll(){$('trainWrap').style.display='';if(pollT)return;pollT=setInterval(async()=>{
+ const r=await fetch('/api/train_status?voice='+encodeURIComponent(curVoice));const d=await r.json();
+ $('trainLog').textContent=d.log||'(starting…)';
+ if(d.state=='ready'||d.state=='failed'){stopPoll();updateTrainBtn(d.state);loadVoices();buildVoiceChips();
+  $('trainLog').textContent+='\n\n'+(d.state=='ready'?'✅ Done — your voice is now in the Speak tab.':'❌ Training failed (see log).');}
+},3000);}
+function stopPoll(){if(pollT){clearInterval(pollT);pollT=null;}}
+document.addEventListener('keydown',e=>{
+ if($('voices').style.display=='none')return;
+ if(e.code=='Space'){e.preventDefault();recToggle();}
+ else if(e.code=='ArrowLeft')recNav(-1); else if(e.code=='ArrowRight')recNav(1);
+});
+buildVoiceChips();
+</script></body></html>

@@ -1,0 +1,30 @@
+# Calliope — inference dependencies (the Studio + live agent).
+# Install into a venv on a machine with an NVIDIA GPU + CUDA 12 driver.
+# See README for the exact, ordered install steps (torch must be the cu124 build).
+
+# --- Core TTS (Orpheus on GPU + SNAC decode) ---
+llama-cpp-python==0.3.34      # install from the cu124 wheel index (see README)
+snac>=1.2.1
+torch==2.6.0                  # install from https://download.pytorch.org/whl/cu124
+torchaudio==2.6.0
+
+# --- Audio ---
+soundfile>=0.12
+numpy>=1.24
+audiotsm>=0.1.2               # WSOLA speed-up (pitch-preserving)
+av>=11.0                      # decodes browser recordings in the Studio recorder
+sounddevice>=0.5              # only needed for the live headset agent (talk.py)
+librosa>=0.10                 # only needed for the live agent
+
+# --- Speech-to-text + turn detection (live agent only) ---
+faster-whisper>=1.1
+silero-vad>=5.1
+
+# --- Misc ---
+requests>=2.31
+python-dotenv>=1.0
+loguru>=0.7
+
+# Brain (llama3.2) runs in Ollama, installed separately (not a pip package).
+# Optional free Gemini brain: pip install google-generativeai
+# Voice fine-tuning uses a SEPARATE venv — see requirements-train.txt.
